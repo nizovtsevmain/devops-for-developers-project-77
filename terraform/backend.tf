@@ -1,20 +1,12 @@
 terraform {
   required_providers {
-    yandex = {
-      source = "yandex-cloud/yandex"
+    selectel = {
+      source  = "selectel/selectel"
+      version = "6.8.0"
     }
-  }
-
-  backend "s3" {
-    endpoints = {
-      s3 = "https://storage.yandexcloud.net"
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = "2.1.0"
     }
-    region = "ru-central1"
-    key    = "hexlet/terraform.tfstate"
-
-    skip_region_validation      = true
-    skip_credentials_validation = true
-    skip_requesting_account_id  = true
-    skip_s3_checksum            = true 
   }
 }

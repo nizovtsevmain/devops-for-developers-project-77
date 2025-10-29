@@ -1,41 +1,16 @@
-variable "token" {
-  type      = string
-  sensitive = true
+variable "selectel_domain_name" {
+  description = "Selectel Domain Name"
+  type        = string
+  default     = 327713
 }
 
-variable "cloud_id" {
-  type      = string
-  sensitive = true
+variable "selectel_username" {
+  description = "Selectel Username"
+  type        = string
+  default     = "Myrtle"
 }
 
-variable "folder_id" {
-  type      = string
-  sensitive = true
-}
-
-variable "yc_zone" {}
-variable "os_image" {}
-
-variable "yc_user" {
-  type      = string
-  sensitive = true
-}
-
-variable "db_name" {
-  type      = string
-  sensitive = true
-}
-
-variable "db_user" {
-  type = string
-}
-
-variable "db_password" {
-  type      = string
-  sensitive = true
-}
-
-variable "https_cert_id" {
+variable "selectel_password" {
   type      = string
   sensitive = true
 }

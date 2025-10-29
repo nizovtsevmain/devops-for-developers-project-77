@@ -1,311 +1,117 @@
-resource "yandex_compute_disk" "boot-disk-1" {
-  name = "disk-1"
-  type = "network-hdd"
-  zone = var.yc_zone
-  size = "30"
-  image_id = var.os_image
+resource "selectel_vpc_project_v2" "project_1" {
+  name = "project"
 }
 
-resource "yandex_compute_disk" "boot-disk-2" {
-  name = "disk-2"
-  type = "network-hdd"
-  zone = var.yc_zone
-  size = "30"
-  image_id = var.os_image
-}
-
-resource "yandex_vpc_network" "network-1" {
-  name = "yandex-student-network"
-}
-
-resource "yandex_vpc_subnet" "subnet-1" {
-  name           = "yandex-student-subnet-1"
-  zone           = var.yc_zone
-  network_id     = yandex_vpc_network.network-1.id
-  v4_cidr_blocks = ["192.168.10.0/24"]
-}
-
-resource "yandex_compute_instance" "web-1" {
-  name = "yandex-student"
-  platform_id = "standard-v1"
-  zone        = var.yc_zone
-
-  resources {
-    core_fraction = 5
-    cores         = 2
-    memory = 2
-  }
-
-  boot_disk {
-    disk_id = yandex_compute_disk.boot-disk-1.id
-  }
-
-  network_interface {
-    subnet_id = yandex_vpc_subnet.subnet-1.id
-    nat       = true
-  }
-
-  scheduling_policy {
-    preemptible = true
-  }
-
-  metadata = {
-    user-data = "#cloud-config\nusers:\n  - name: ${var.yc_user}\n    groups: sudo\n    shell: /bin/bash\n    sudo: 'ALL=(ALL) NOPASSWD:ALL'\n    ssh-authorized-keys:\n      - ${file("~/.ssh/id/yandex/cloud/id_student.pub")}"
-  }
-
-  connection {
-    type        = "ssh"
-    user        = var.yc_user
-    private_key = file("~/.ssh/id/yandex/cloud/id_student")
-    host        = self.network_interface[0].nat_ip_address
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      <<EOT
-sudo docker run -d -p 0.0.0.0:80:3000 \
-  -e DB_TYPE=postgres \
-  -e DB_NAME=${module.yandex-postgresql.databases[0]} \
-  -e DB_HOST=${module.yandex-postgresql.cluster_fqdns_list[0].0} \
-  -e DB_PORT=6432 \
-  -e DB_USER=${module.yandex-postgresql.owners_data[0].user} \
-  -e DB_PASS=${module.yandex-postgresql.owners_data[0].password} \
-  ghcr.io/requarks/wiki:2.5
-EOT
-    ]
-  }
-  depends_on = [module.yandex-postgresql]
-}
-
-resource "yandex_compute_instance" "web-2" {
-  name = "yandex-student-2"
-  platform_id = "standard-v1"
-  zone        = var.yc_zone
-
-  resources {
-    core_fraction = 5
-    cores         = 2
-    memory = 2
-  }
-
-  boot_disk {
-    disk_id = yandex_compute_disk.boot-disk-2.id
-  }
-
-  network_interface {
-    subnet_id = yandex_vpc_subnet.subnet-1.id
-    nat       = true
-  }
-
-  # прерываемая
-  scheduling_policy {
-    preemptible = true
-  }
-
-  metadata = {
-    user-data = "#cloud-config\nusers:\n  - name: ${var.yc_user}\n    groups: sudo\n    shell: /bin/bash\n    sudo: 'ALL=(ALL) NOPASSWD:ALL'\n    ssh-authorized-keys:\n      - ${file("~/.ssh/id/yandex/cloud/id_student_2.pub")}"
-  }
-
-  connection {
-    type        = "ssh"
-    user        = var.yc_user
-    private_key = file("~/.ssh/id/yandex/cloud/id_student_2")
-    host        = self.network_interface[0].nat_ip_address
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      <<EOT
-sudo docker run -d -p 0.0.0.0:80:3000 \
-  -e DB_TYPE=postgres \
-  -e DB_NAME=${module.yandex-postgresql.databases[0]} \
-  -e DB_HOST=${module.yandex-postgresql.cluster_fqdns_list[0].0} \
-  -e DB_PORT=6432 \
-  -e DB_USER=${module.yandex-postgresql.owners_data[0].user} \
-  -e DB_PASS=${module.yandex-postgresql.owners_data[0].password} \
-  ghcr.io/requarks/wiki:2.5
-EOT
-    ]
-  }
-
-  depends_on = [module.yandex-postgresql]
-}
-
-resource "yandex_alb_target_group" "target-group" {
-  name = "yandex-student-target-group"
-
-  target {
-    subnet_id  = yandex_vpc_subnet.subnet-1.id
-    ip_address = yandex_compute_instance.web-1.network_interface.0.ip_address
-  }
-
-  target {
-    subnet_id  = yandex_vpc_subnet.subnet-1.id
-    ip_address = yandex_compute_instance.web-2.network_interface.0.ip_address
+resource "selectel_iam_serviceuser_v1" "serviceuser_1" {
+  name     = "hexlet"
+  password = "K.l:,FyGvQr<xDx9z^7%"
+  role {
+    role_name  = "member"
+    scope      = "project"
+    project_id = selectel_vpc_project_v2.project_1.id
   }
 }
 
-resource "yandex_alb_backend_group" "backend-group" {
-  name = "yandex-student-backend-group"
-
-  http_backend {
-    name             = "yandex-student-backend"
-    weight           = 1
-    port             = 80
-    target_group_ids = [yandex_alb_target_group.target-group.id]
-    load_balancing_config {
-      panic_threshold = 90
-    }
-    healthcheck {
-      timeout             = "10s"
-      interval            = "2s"
-      healthy_threshold   = 10
-      unhealthy_threshold = 15
-      http_healthcheck {
-        path = "/"
-      }
-    }
-  }
-
-  depends_on = [yandex_alb_target_group.target-group]
+resource "selectel_vpc_keypair_v2" "keypair_1" {
+  name       = "keypair"
+  public_key = file("~/.ssh/id_ed25519.pub")
+  user_id    = selectel_iam_serviceuser_v1.serviceuser_1.id
 }
 
-resource "yandex_alb_http_router" "tf-router" {
-  name = "yandex-student-http-router"
-  labels = {
-    tf-label    = "yandex-student"
-    empty-label = ""
+resource "openstack_compute_flavor_v2" "flavor_1" {
+  name      = "hexlet"
+  vcpus     = 2
+  ram       = 2048
+  disk      = 0
+  is_public = false
+
+  lifecycle {
+    create_before_destroy = true
   }
+
 }
 
-resource "yandex_alb_virtual_host" "my-virtual-host" {
-  name           = "yandex-student-virtual-host"
-  http_router_id = yandex_alb_http_router.tf-router.id
-  route {
-    name = "yandex-student-route"
-    http_route {
-      http_route_action {
-        backend_group_id = yandex_alb_backend_group.backend-group.id
-        timeout          = "60s"
-      }
-    }
+resource "openstack_networking_network_v2" "network_1" {
+  name           = "private-network"
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_subnet_v2" "subnet_1" {
+  name       = "private-subnet"
+  network_id = openstack_networking_network_v2.network_1.id
+  cidr       = "192.168.199.0/24"
+}
+
+resource "openstack_networking_port_v2" "port_1" {
+  name       = "port"
+  network_id = openstack_networking_network_v2.network_1.id
+
+  fixed_ip {
+    subnet_id = openstack_networking_subnet_v2.subnet_1.id
   }
 }
 
-resource "yandex_alb_load_balancer" "balancer" {
-  name       = "yandex-student-app-lb"
-  network_id = yandex_vpc_network.network-1.id
+data "openstack_images_image_v2" "image_1" {
+  name        = "Ubuntu 20.04 LTS 64-bit"
+  most_recent = true
+  visibility  = "public"
+}
 
-  allocation_policy {
-    location {
-      zone_id   = yandex_vpc_subnet.subnet-1.zone
-      subnet_id = yandex_vpc_subnet.subnet-1.id
-    }
+resource "openstack_blockstorage_volume_v3" "volume_1" {
+  name                 = "boot-volume-for-server"
+  size                 = "5"
+  image_id             = data.openstack_images_image_v2.image_1.id
+  volume_type          = "fast.ru-9a"
+  availability_zone    = "ru-9a"
+  enable_online_resize = true
+
+  lifecycle {
+    ignore_changes = [image_id]
   }
 
-  listener {
-    name = "yandex-student-listener-http"
-    endpoint {
-      address {
-        external_ipv4_address {
-        }
-      }
-      ports = [80]
-    }
-    http {
+}
 
-      redirects {
-        http_to_https = true
-      }
-    }
+resource "openstack_blockstorage_volume_v3" "volume_2" {
+  name                 = "additional-volume-for-server"
+  size                 = "7"
+  volume_type          = "universal.ru-9a"
+  availability_zone    = "ru-9a"
+  enable_online_resize = true
+}
+
+resource "openstack_compute_instance_v2" "server_1" {
+  name              = "server"
+  flavor_id         = openstack_compute_flavor_v2.flavor_1.id
+  key_pair          = selectel_vpc_keypair_v2.keypair_1.name
+  availability_zone = "ru-9a"
+
+  network {
+    port = openstack_networking_port_v2.port_1.id
   }
 
-  listener {
-    name = "yandex-student-listener-tls"
-    endpoint {
-      address {
-        external_ipv4_address {}
-      }
-      ports = [443]
-    }
-    tls {
-      default_handler {
-        http_handler {
-          http_router_id = yandex_alb_http_router.tf-router.id
-        }
-        certificate_ids = [var.https_cert_id]
-      }
-    }
+  lifecycle {
+    ignore_changes = [image_id]
+  }
+
+  block_device {
+    uuid             = openstack_blockstorage_volume_v3.volume_1.id
+    source_type      = "volume"
+    destination_type = "volume"
+    boot_index       = 0
+  }
+
+  block_device {
+    uuid             = openstack_blockstorage_volume_v3.volume_2.id
+    source_type      = "volume"
+    destination_type = "volume"
+    boot_index       = -1
+  }
+
+  vendor_options {
+    ignore_resize_confirmation = true
   }
 }
 
-module "yandex-postgresql" {
-  source      = "github.com/terraform-yc-modules/terraform-yc-postgresql?ref=1.0.2"
-  network_id  = yandex_vpc_network.network-1.id
-  name        = "tfhexlet"
-  description = "Single-node PostgreSQL cluster for test purposes"
-
-  hosts_definition = [
-    {
-      zone             = var.yc_zone
-      assign_public_ip = false
-      subnet_id        = yandex_vpc_subnet.subnet-1.id
-    }
-  ]
-
-  postgresql_config = {
-    max_connections = 100
-  }
-
-  databases = [
-    {
-      name       = "hexlet"
-      owner      = var.db_user
-      lc_collate = "ru_RU.UTF-8"
-      lc_type    = "ru_RU.UTF-8"
-      extensions = ["uuid-ossp", "xml2"]
-    },
-    {
-      name       = "hexlet-test"
-      owner      = var.db_user
-      lc_collate = "ru_RU.UTF-8"
-      lc_type    = "ru_RU.UTF-8"
-      extensions = ["uuid-ossp", "xml2"]
-    }
-  ]
-
-  owners = [
-    {
-      name       = var.db_user
-      conn_limit = 15
-    }
-  ]
-
-  users = [
-    {
-      name        = "guest"
-      conn_limit  = 30
-      permissions = ["hexlet"]
-      settings = {
-        pool_mode                   = "transaction"
-        prepared_statements_pooling = true
-      }
-    }
-  ]
-}
-
-output "internal_ip_address_vm_1" {
-  value = yandex_compute_instance.web-1.network_interface.0.ip_address
-}
-
-output "internal_ip_address_vm_2" {
-  value = yandex_compute_instance.web-2.network_interface.0.ip_address
-}
-
-output "external_ip_address_vm_1" {
-  value = yandex_compute_instance.web-1.network_interface.0.nat_ip_address
-}
-
-output "external_ip_address_vm_2" {
-  value = yandex_compute_instance.web-2.network_interface.0.nat_ip_address
+resource "openstack_networking_floatingip_v2" "floatingip_1" {
+  pool = "external-network"
 }
